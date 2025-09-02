@@ -536,6 +536,30 @@ void sign_menu()
     }
 }
 
+void user_menu()
+{
+    if ( !curr_user_ptr )
+    {
+        cout << "Error: No user logged in!\n" ;
+        sign_menu() ;
+        return ;
+    }
+
+    vector <string> menu = 
+    {
+        "Change Name" ,
+        "Change password" ,
+        "Return to Main menu"
+    } ;
+
+    int type = print_menu( menu ) ;
+
+    if ( type == 1 ) curr_user_ptr->change_name() ;
+    else if ( type == 2 ) curr_user_ptr->change_pass() ;
+    else if ( type == 3 ) return ;
+
+}
+
 void main_menu()
 {
     if ( !curr_user_ptr )
@@ -554,6 +578,7 @@ void main_menu()
         "Ask Question" ,
         "List System Users" ,
         "Feed" ,
+        "User menu" ,
         "Logout"
     } ;
 
@@ -576,7 +601,8 @@ void main_menu()
     }
     else if ( type == 6 ) user::print_all_user() ;
     else if ( type == 7 ) questions::print_all_question() ;
-    else if ( type == 8 ) 
+    else if ( type == 8 ) user_menu() ;
+    else if ( type == 9 ) 
     {
         curr_user_ptr->sign_out() ;
         cout << "Logged out successfully!\n" ;
