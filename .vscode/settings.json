@@ -21,6 +21,7 @@
         "valarray": "cpp",
         "filesystem": "cpp",
         "string": "cpp",
-        "format": "cpp"
+        "format": "cpp",
+        "random": "cpp"
     }
 }

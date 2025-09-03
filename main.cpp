@@ -32,12 +32,16 @@ string read_string()
 
 int read_int()
 {
-    int temp ;
+    string temp ;
     while ( true )
     {
         if ( cin >> temp )
         {
-            return temp ;
+            bool good = ( isdigit( temp[0] ) || temp[0] == '-' ) ;
+            for ( int i = 1 ; i < int(temp.size()) && good ; i ++ )
+                if ( !isdigit( temp[i] ) ) good = 0 ;
+
+            if ( good ) return stoi(temp) ;
         }
 
         cout << "Not integer value\n" ;
@@ -80,7 +84,7 @@ int print_menu( const vector<string>& menu )
     cout << "Menu:\n" ;
     int n = menu.size() ;
     for ( int i = 0 ; i < n ; i++ ) cout << "\t" << i + 1 << ": " << menu[i] << "\n" ;
-    return read_int( 1 , n ) ;
+    return read_int( "Select your operation : " , 1 , n ) ;
 }
 
 class user
@@ -100,7 +104,7 @@ class user
 
         user ( const string& name , const string& pass , int given_id = -1 )
         {
-            if ( given_id == -1 ) this->id = ++id_cnt; 
+            if ( given_id == -1 ) this->id = ++ id_cnt ; 
             else this->id = given_id ;
                 
             this->name = name ;
@@ -121,7 +125,7 @@ class user
             while ( true )
             {
                 cout << "\nEnter your id ( to back enter -1 ): " ;
-                cin >> id ;
+                id = read_int() ;
 
                 if ( id == -1 ) return -1 ;
                 if ( curr_users.find( id ) != curr_users.end() )
@@ -235,6 +239,16 @@ class user
 
         void print_to_me() ;
         void print_to_from() ;
+
+        void delete_user_data_only ()
+        {
+            // Remove user from global map
+            // curr_users.erase( id ) ;
+            
+            curr_questions.clear() ;
+            curr_answers.clear() ;
+            curr_none_answered.clear() ;
+        }
         
         ~user() ;
 } ;
@@ -301,14 +315,17 @@ class questions
             this->to_user_id = to_user_id ; 
             this->question = question ; 
             if ( answer != "NULL" ) this->answer = answer ; 
-            this->is_valid = is_valid ;\
+            this->is_valid = is_valid ;
 
             if ( user::curr_users.find( owner_id ) != user::curr_users.end() )
                 user::curr_users[owner_id]->add_question( this ) ;
 
             if ( user::curr_users.find( to_user_id ) != user::curr_users.end() )
-                user::curr_users[to_user_id]->add_none_answered( this ) ;
-
+            {
+                if ( this->answer.empty() ) user::curr_users[to_user_id]->add_none_answered( this ) ;
+                else user::curr_users[to_user_id]->add_answer( this ) ;
+            }
+                
             curr_questions[id] = this ;
         }
 
@@ -405,6 +422,23 @@ class questions
             else out << "\"" << u.answer << "\"" ;
             out << " " << u.is_valid ;
             return out ;
+        }
+
+        void delete_question ( )
+        {
+
+            // Remove from users' sets
+            if ( user::curr_users.find( this->owner_id ) != user::curr_users.end() )
+                user::curr_users[this->owner_id]->remove_question( this ) ;
+
+            if ( user::curr_users.find( this->to_user_id ) != user::curr_users.end() )
+                user::curr_users[this->to_user_id]->remove_question( this ) ;
+
+
+            curr_questions.erase( this->id ) ;
+            
+            delete this ;
+            cout << "Question deleted successfully!\n" ;
         }
 
         static void delete_question ( int question_id )
@@ -530,8 +564,7 @@ user::~user()
     
     for ( auto q : to_delete ) 
     {
-        questions::curr_questions.erase( q->get_id() ) ;
-        delete q ;
+        q->delete_question() ;
     }
     
     curr_questions.clear() ;
@@ -541,8 +574,8 @@ user::~user()
 
 void delete_all_users ()
 {
-    for ( const auto & [ id , ptr ] : user::curr_users )
-        ptr->~user() ;
+    // for ( const auto & [ id , ptr ] : user::curr_users )
+    //     ptr->delete_user_data_only() ;
 
     user::set_id_cnt( 0 ) ;
     user::curr_users.clear();
@@ -550,8 +583,8 @@ void delete_all_users ()
 
 void delete_all_questions ()
 {
-    for ( const auto & [ id , ptr ] : questions::curr_questions )
-        ptr->~questions() ; 
+    // for ( const auto & [ id , ptr ] : questions::curr_questions )
+    //     delete ptr ; 
 
     questions::set_id_cnt( 0 ) ;
     questions::curr_questions.clear();
@@ -654,11 +687,19 @@ void LoadDataBase ()
     if ( !fs::exists("database") )
         fs::create_directory( "database" ) ;
 
+    int curr_id = -1 ;
+    if ( curr_user_ptr != nullptr ) curr_id = curr_user_ptr->get_id() ;
+
+    curr_user_ptr = nullptr ;
     delete_all_users () ;
     delete_all_questions () ;
 
     raed_users () ;
     raed_questions () ;
+
+    if ( curr_id != -1 && user::curr_users.find( curr_id ) != user::curr_users.end() ) curr_user_ptr = user::curr_users[curr_id] ;
+    else curr_user_ptr = nullptr ;
+
 }
 
 void SaveDataBase ()
@@ -681,6 +722,8 @@ void sign_menu()
 
     int type = print_menu( menu ) ;
 
+    LoadDataBase () ;
+
     if ( type == 1 )
     {
         curr_user_ptr = user::sign_in() ;
@@ -692,6 +735,7 @@ void sign_menu()
         else
         {
             cout << "\nLogin failed or cancelled.\n" ;
+            SaveDataBase () ;
             sign_menu() ;
         }
     }
@@ -702,6 +746,7 @@ void sign_menu()
         
         cout << "User created with ID = " << new_user->get_id() << "\n" ;
         cout << "Please login with your new account.\n" ;
+        SaveDataBase () ;
         sign_menu() ;
     }
     else
@@ -724,6 +769,7 @@ void user_menu()
     {
         "Change Name" ,
         "Change password" ,
+        "Delete Useur" ,
         "Return to Main menu"
     } ;
 
@@ -731,7 +777,22 @@ void user_menu()
 
     if ( type == 1 ) curr_user_ptr->change_name() ;
     else if ( type == 2 ) curr_user_ptr->change_pass() ;
-    else if ( type == 3 ) return ;
+    else if ( type == 3 ) 
+    {
+        string confirm ;
+        confirm = read_string ( "Are you sure you want to delete your account? (y/n): " ) ; 
+        if ( confirm == "y" || confirm == "Y" )
+        {
+            delete curr_user_ptr;
+            curr_user_ptr = nullptr;
+            cout << "Your account has been deleted.\n";
+            sign_menu();
+            return;
+        }
+    }
+    else if ( type == 4 ) return ;
+
+    SaveDataBase () ;
 
 }
 
@@ -744,7 +805,7 @@ void main_menu()
         return ;
     }
 
-    // LoadDataBase () ; // to allow multible user to use system at the same time
+    LoadDataBase () ; // to allow multible user to use system at the same time
 
     vector <string> menu = 
     {
@@ -788,8 +849,7 @@ void main_menu()
         return ;
     }
 
-    if ( 3 <= type && type <= 5 )
-        SaveDataBase () ; // to allow multible user to use system at the same time
+    SaveDataBase () ; 
 
     main_menu() ;
 }
