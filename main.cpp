@@ -1,6 +1,9 @@
 // وَأَن لَّيْسَ لِلْإِنسَانِ إِلَّا مَا سَعَىٰ ( 39 ) وَأَنَّ سَعْيَهُ سَوْفَ يُرَىٰ ( 40 ) ثُمَّ يُجْزَاهُ الْجَزَاءَ الْأَوْفَىٰ ( 41 )
 #include <bits/stdc++.h>
+#include <filesystem>
+
 using namespace std ;
+namespace fs = std::filesystem;
 
     class user ;
     class questions ;
@@ -16,7 +19,6 @@ string read_string()
 {
     string temp ;
     cin.clear() ;
-    cin.ignore( numeric_limits<streamsize>::max() , '\n' ) ;
     
     while ( true )
     {
@@ -35,13 +37,10 @@ int read_int()
     {
         if ( cin >> temp )
         {
-            cin.ignore( numeric_limits<streamsize>::max() , '\n' ) ; // Clear the input buffer
             return temp ;
         }
 
         cout << "Not integer value\n" ;
-        cin.clear() ;
-        cin.ignore( numeric_limits<streamsize>::max() , '\n' ) ;
     }
 }
 
@@ -99,17 +98,22 @@ class user
     public:
         static map < int , user * > curr_users ;
 
-        user( const string& name , const string& pass )
+        user ( const string& name , const string& pass , int given_id = -1 )
         {
-            id = ++id_cnt ;
+            if ( given_id == -1 ) this->id = ++id_cnt; 
+            else this->id = given_id ;
+                
             this->name = name ;
             this->pass = pass ;
+            curr_users[this->id] = this ; 
         }
 
         user() : user( read_string( "Enter name: " ) , read_string( "Enter password: " ) ) {}
 
         int get_id() const { return id ; }
         string get_name() const { return name ; }
+        static void set_id_cnt ( int id ) { id_cnt = id ; }
+        static int get_id_cnt () { return id_cnt ; }
 
         static int read_id()
         {
@@ -118,7 +122,6 @@ class user
             {
                 cout << "\nEnter your id ( to back enter -1 ): " ;
                 cin >> id ;
-                cin.ignore( numeric_limits<streamsize>::max() , '\n' ) ; // Clear input buffer
 
                 if ( id == -1 ) return -1 ;
                 if ( curr_users.find( id ) != curr_users.end() )
@@ -139,8 +142,8 @@ class user
             while ( true )
             {
                 cout << "\nEnter your password ( to back enter -1 ): " ;
-                cin >> pass ;
-                cin.ignore( numeric_limits<streamsize>::max() , '\n' ) ; // Clear input buffer
+                cin.ignore() ;
+                getline( cin , pass ) ;
 
                 if ( pass == "-1" ) return nullptr ;
                 if ( curr->pass == pass ) break ;
@@ -155,6 +158,7 @@ class user
         {
             curr_user_ptr = nullptr ;
         }
+
 
         static string print_name( int id )
         {
@@ -223,6 +227,12 @@ class user
             }
         }
 
+        friend ofstream& operator<<(ofstream& out, const user & u )
+        {
+            out << u.id << " " << u.name << " " << u.pass ;
+            return out ;
+        }
+
         void print_to_me() ;
         void print_to_from() ;
         
@@ -269,6 +279,7 @@ class questions
                 return ;
             }
 
+            cin.ignore();
             this->question = read_string( "Enter your question: " ) ;
             
             // Add to user's question lists
@@ -283,7 +294,27 @@ class questions
             cout << "Question created successfully with ID: " << id << "\n" ;
         }
 
+        questions ( int id , int owner_id , int to_user_id , const string & question , const string & answer , bool is_valid )
+        {
+            this->id = id ; 
+            this->owner_id = owner_id ; 
+            this->to_user_id = to_user_id ; 
+            this->question = question ; 
+            if ( answer != "NULL" ) this->answer = answer ; 
+            this->is_valid = is_valid ;\
+
+            if ( user::curr_users.find( owner_id ) != user::curr_users.end() )
+                user::curr_users[owner_id]->add_question( this ) ;
+
+            if ( user::curr_users.find( to_user_id ) != user::curr_users.end() )
+                user::curr_users[to_user_id]->add_none_answered( this ) ;
+
+            curr_questions[id] = this ;
+        }
+
         bool is_question_valid() const { return is_valid ; }
+        static void set_id_cnt ( int id ) { id_cnt = id ; }
+        static int get_id_cnt () { return id_cnt ; }
 
         static int read_id()
         {
@@ -292,7 +323,6 @@ class questions
             {
                 cout << "\nEnter Question id ( to back enter -1 ): " ;
                 cin >> id ;
-                cin.ignore( numeric_limits<streamsize>::max() , '\n' ) ; // Clear input buffer
 
                 if ( id == -1 ) return -1 ;
                 if ( curr_questions.find( id ) != curr_questions.end() )
@@ -368,6 +398,15 @@ class questions
                 ptr->print_question() ;
         }
 
+        friend ofstream& operator<<(ofstream& out, const questions& u)
+        {
+            out << u.id << " " << u.owner_id << " " << u.to_user_id << " \"" << u.question << "\" " ;
+            if ( u.answer.empty()) out << "NULL" ;
+            else out << "\"" << u.answer << "\"" ;
+            out << " " << u.is_valid ;
+            return out ;
+        }
+
         static void delete_question ( int question_id )
         {
             auto it = curr_questions.find( question_id ) ;
@@ -421,10 +460,14 @@ void user::answer_question()
     if ( id == -1 ) return ;
     
     auto it = questions::curr_questions.find( id ) ;
-    if ( it != questions::curr_questions.end() && it->second ) {
+    if ( it != questions::curr_questions.end() && it->second )
+    {
         // Check if this question is actually in the user's unanswered list
         if ( curr_none_answered.find( it->second ) != curr_none_answered.end() )
+        {
+            cin.ignore(); 
             it->second->set_answer() ;
+        }
         else
             cout << "This question is not in your unanswered list!\n" ;
 
@@ -496,6 +539,137 @@ user::~user()
     curr_none_answered.clear() ;
 }
 
+void delete_all_users ()
+{
+    for ( const auto & [ id , ptr ] : user::curr_users )
+        ptr->~user() ;
+
+    user::set_id_cnt( 0 ) ;
+    user::curr_users.clear();
+}
+
+void delete_all_questions ()
+{
+    for ( const auto & [ id , ptr ] : questions::curr_questions )
+        ptr->~questions() ; 
+
+    questions::set_id_cnt( 0 ) ;
+    questions::curr_questions.clear();
+}
+
+void raed_users()
+{
+    if (!(fs::exists("database/users.txt") && fs::is_regular_file("database/users.txt")))
+        return;
+
+    ifstream in("database/users.txt");
+    if (!in.is_open()) {
+        cout << "Error: Could not open users.txt\n";
+        return;
+    }
+
+    int n, curr_id;
+    in >> n >> curr_id;
+    user::set_id_cnt(curr_id);
+
+    while (n--) {
+        int id;
+        string name, pass;
+        
+        in >> id >> name >> pass;
+        
+        new user(name, pass, id);
+    }
+
+    in.close();
+}
+
+void raed_questions ()
+{
+
+    if (!( fs::exists("database/questions.txt") && fs::is_regular_file("database/questions.txt") ))
+        return ;
+
+    ifstream in ( "database/questions.txt" ) ;
+    int n , curr_id ; in >> n >> curr_id ;
+    questions::set_id_cnt( curr_id ) ;
+
+    while (n--)
+    {
+        int id , owner_id , to_user_id ;
+        string question , answer ;
+        bool is_valid ;
+        
+        in >> id >> owner_id >> to_user_id;
+        in.ignore() ;
+        
+        getline(in, question, '"');
+        getline(in, question, '"');
+        
+        in.ignore() ;
+        
+        string temp; in >> temp;
+        if (temp == "NULL") answer = "";    
+        else 
+        {
+            getline(in, answer, '"') ;
+            getline(in, answer, '"') ;
+        }
+        
+        in >> is_valid ;
+        
+        new questions( id , owner_id , to_user_id , question , answer , is_valid ) ;
+    }
+
+    in.close() ;
+}
+
+void write_users ()
+{
+    remove( "database/users.txt" ) ;
+    ofstream out ( "database/users.txt" ) ;
+    out << user::curr_users.size() << " " << user::get_id_cnt() << "\n" ;
+
+    for ( const auto & [ id , ptr ] : user::curr_users )
+        out << *ptr << "\n" ;
+
+    out.close() ;
+}
+
+void write_questions ()
+{
+    remove( "database/questions.txt" ) ;
+    ofstream out ( "database/questions.txt" ) ;
+    
+    out << questions::curr_questions.size() << " " << questions::get_id_cnt() << "\n" ;
+
+    for ( const auto & [ id , ptr ] : questions::curr_questions )
+        out << *ptr << "\n" ;
+
+    out.close() ;
+}
+
+void LoadDataBase ()
+{
+    if ( !fs::exists("database") )
+        fs::create_directory( "database" ) ;
+
+    delete_all_users () ;
+    delete_all_questions () ;
+
+    raed_users () ;
+    raed_questions () ;
+}
+
+void SaveDataBase ()
+{
+    if ( !fs::exists("database") )
+        fs::create_directory( "database" ) ;
+
+    write_users () ;
+    write_questions () ;
+}
+
 void sign_menu()
 {
     vector<string> menu = 
@@ -523,8 +697,9 @@ void sign_menu()
     }
     else if ( type == 2 )
     {
+        cin.ignore();
         user* new_user = new user() ;
-        user::curr_users[new_user->get_id()] = new_user ;
+        
         cout << "User created with ID = " << new_user->get_id() << "\n" ;
         cout << "Please login with your new account.\n" ;
         sign_menu() ;
@@ -569,6 +744,8 @@ void main_menu()
         return ;
     }
 
+    // LoadDataBase () ; // to allow multible user to use system at the same time
+
     vector <string> menu = 
     {
         "Print Questions To Me" ,
@@ -593,7 +770,8 @@ void main_menu()
         if ( id != -1 )
             questions::delete_question( id ) ;
     }
-    else if ( type == 5 ) {
+    else if ( type == 5 ) 
+    {
         questions* new_q = new questions() ;
         if ( !new_q->is_question_valid() ) {
             delete new_q ;
@@ -610,15 +788,23 @@ void main_menu()
         return ;
     }
 
+    if ( 3 <= type && type <= 5 )
+        SaveDataBase () ; // to allow multible user to use system at the same time
+
     main_menu() ;
 }
+
 
 int main()
 {
 
+    LoadDataBase () ;
+
     cout << "Welcome to the Q&A System!\n" ;
     cout << "============================\n" ;
     sign_menu() ;
+
+    SaveDataBase () ;
 
 
     return 0 ;
